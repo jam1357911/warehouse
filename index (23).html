@@ -1,0 +1,2655 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>倉庫番大師 - Sokoban Master</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: #2d2d2d;
+            /* 固定成視窗高（dvh 跟住手機工具列）：整個版面永遠唔會高過畫面，
+               底部按鈕就唔會被 overflow:hidden 裁走 */
+            height: 100vh;
+            height: 100dvh;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #e8dcc4;
+            overflow: hidden;
+        }
+
+        .header {
+            width: 100%;
+            padding: 15px 20px;
+            background: linear-gradient(180deg, #3d3d3d 0%, #2d2d2d 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #4a4a4a;
+            flex: 0 0 auto;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #e8dcc4;
+            text-shadow: 2px 2px 0 #1a1a1a;
+        }
+
+        .level-info {
+            font-size: 1.1rem;
+            color: #c17f59;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #4a90d9;
+            font-weight: 700;
+        }
+
+        .game-container {
+            flex: 1 1 auto;
+            min-height: 0;   /* 關鍵：唔可以被棋盤撐到縮唔到，否則會擠走下面嘅按鈕 */
+            min-width: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            overflow: hidden;
+            font-size: 0;
+            line-height: 0;
+        }
+
+        .game-board {
+            display: grid;
+            gap: 0 !important;
+            background: #e8dcc4;
+            font-size: 0;
+            line-height: 0;
+            flex: none;
+        }
+
+        .cell {
+            /* 尺寸由 JS 依剩餘空間計算嘅 grid track 決定，唔再寫死 px */
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0;
+            line-height: 0;
+            border-right: 1px solid #1a1a1a;
+            border-bottom: 1px solid #1a1a1a;
+            box-sizing: border-box;
+            transition: all 0.15s ease;
+        }
+
+        .floor {
+            background: transparent;
+        }
+
+        .wall {
+            background: #4a4a4a;
+        }
+
+        .target {
+            background: #e8dcc4;
+            position: relative;
+        }
+
+        .target::after {
+            content: '';
+            position: absolute;
+            width: 60%;
+            height: 60%;
+            border: 3px dashed #d45454;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+
+        .box {
+            background: linear-gradient(135deg, #d4956a 0%, #c17f59 50%, #a86a4a 100%);
+            width: 80%;
+            height: 80%;
+        }
+
+        .box-on-target {
+            background: linear-gradient(135deg, #6ab56a 0%, #5a9c5a 50%, #4a8c4a 100%);
+        }
+
+        .player {
+            background: linear-gradient(135deg, #5aa0e9 0%, #4a90d9 50%, #3a80c9 100%);
+            border-radius: 50%;
+            width: 76%;
+            height: 76%;
+            z-index: 10;
+        }
+
+        .controls {
+            padding: 15px 20px;
+            background: linear-gradient(0deg, #3d3d3d 0%, #2d2d2d 100%);
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            border-top: 2px solid #4a4a4a;
+            min-height: 60px;
+            visibility: visible;
+            position: relative;
+            z-index: 10;
+            flex: 0 0 auto;   /* 永遠佔住自己嘅高度，唔會被棋盤擠走 */
+            width: 100%;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-family: 'Noto Sans TC', sans-serif;
+            font-weight: 700;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #5a9c5a 0%, #4a8c4a 100%);
+            color: white;
+            box-shadow: 0 3px 0 #3a6c3a;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 0 #3a6c3a;
+        }
+
+        .btn-primary:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 0 #3a6c3a;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6a6a6a 0%, #5a5a5a 100%);
+            color: white;
+            box-shadow: 0 3px 0 #3a3a3a;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 0 #3a3a3a;
+        }
+
+        .btn-secondary:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 0 #3a3a3a;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #d45454 0%, #c44444 100%);
+            color: white;
+            box-shadow: 0 3px 0 #a43434;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 0 #a43434;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #3d3d3d;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #e8dcc4;
+        }
+
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .level-btn {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            border: 2px solid #5a5a5a;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #4a4a4a;
+            color: #e8dcc4;
+        }
+
+        .level-btn:hover {
+            transform: scale(1.1);
+            border-color: #4a90d9;
+        }
+
+        .level-btn.completed {
+            background: linear-gradient(135deg, #5a9c5a 0%, #4a8c4a 100%);
+            border-color: #5a9c5a;
+        }
+
+        .level-btn.current {
+            border-color: #4a90d9;
+            box-shadow: 0 0 10px #4a90d9;
+        }
+
+        .level-btn .box-count {
+            font-size: 0.7rem;
+            color: #ccc;
+        }
+
+        .level-btn.completed .box-count {
+            color: #d4e8d4;
+        }
+
+        .close-modal {
+            width: 100%;
+        }
+
+        .win-modal .modal-content {
+            text-align: center;
+        }
+
+        .win-modal h2 {
+            font-size: 2rem;
+            color: #5a9c5a;
+            margin-bottom: 15px;
+        }
+
+        .win-modal p {
+            margin-bottom: 20px;
+            color: #ccc;
+        }
+
+        .win-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .mobile-controls {
+            display: none;
+            padding: 10px;
+            background: #2d2d2d;
+            position: relative;
+            z-index: 5;
+            flex: 0 0 auto;
+            width: 100%;
+            --dpad: clamp(46px, 15vmin, 100px);
+        }
+
+        .d-pad {
+            display: grid;
+            grid-template-columns: repeat(3, var(--dpad));
+            grid-template-rows: repeat(3, var(--dpad));
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .d-btn {
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: 12px;
+            font-size: clamp(1.4rem, 5vmin, 2.5rem);
+            cursor: pointer;
+            background: linear-gradient(135deg, #5a5a5a 0%, #4a4a4a 100%);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .d-btn:active {
+            background: linear-gradient(135deg, #6a6a6a 0%, #5a5a5a 100%);
+        }
+
+        .d-btn.empty {
+            background: transparent;
+            pointer-events: none;
+        }
+
+        .progress-bar {
+            display: flex;
+            gap: 5px;
+            margin-left: 15px;
+        }
+
+        .progress-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #5a5a5a;
+            border: 2px solid #6a6a6a;
+        }
+
+        .progress-dot.filled {
+            background: #5a9c5a;
+            border-color: #6ab56a;
+        }
+
+        @media (max-width: 768px) {
+            .game-board {
+                gap: 0 !important;
+                background: #e8dcc4;
+            }
+
+            .cell {
+                font-size: 18px;
+                border-right: 1px solid #1a1a1a;
+                border-bottom: 1px solid #1a1a1a;
+            }
+
+            .target::after {
+                border-width: 2px;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .stats {
+                font-size: 0.9rem;
+            }
+
+            .controls {
+                padding: 10px;
+                display: flex !important;
+                visibility: visible !important;
+            }
+
+            .btn {
+                padding: 8px 12px;
+                font-size: 0.85rem;
+                min-width: 50px;
+            }
+
+            .mobile-controls {
+                display: block;
+            }
+
+            .level-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+
+            .level-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .game-board {
+                gap: 0 !important;
+                background: #e8dcc4;
+            }
+
+            .cell {
+                font-size: 14px;
+                border-right: 1px solid #1a1a1a;
+                border-bottom: 1px solid #1a1a1a;
+            }
+
+            .target::after {
+                border-width: 2px;
+            }
+
+            .controls {
+                padding: 8px 5px;
+                gap: 5px;
+            }
+
+            .btn {
+                padding: 6px 8px;
+                font-size: 0.75rem;
+                min-width: 45px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1 class="title">倉庫番大師</h1>
+        <div class="level-info">關卡 <span id="currentLevel">1</span> / 30</div>
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-label">步數:</span>
+                <span class="stat-value" id="steps">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">箱子:</span>
+                <span class="progress-bar" id="progressBar"></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="game-container">
+        <div class="game-board" id="gameBoard"></div>
+    </div>
+
+    <div class="mobile-controls">
+        <div class="d-pad">
+            <div class="d-btn empty"></div>
+            <div class="d-btn" data-dir="up">▲</div>
+            <div class="d-btn empty"></div>
+            <div class="d-btn" data-dir="left">◀</div>
+            <div class="d-btn empty"></div>
+            <div class="d-btn" data-dir="right">▶</div>
+            <div class="d-btn empty"></div>
+            <div class="d-btn" data-dir="down">▼</div>
+            <div class="d-btn empty"></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-secondary" id="undoBtn">撤回 (U)</button>
+        <button class="btn btn-danger" id="resetBtn">重置 (R)</button>
+        <button class="btn btn-primary" id="levelsBtn">關卡 (L)</button>
+        <button class="btn btn-secondary" id="prevBtn">上一關</button>
+        <button class="btn btn-secondary" id="nextBtn">下一關</button>
+    </div>
+
+    <div class="modal" id="levelModal">
+        <div class="modal-content">
+            <h2 class="modal-title">選擇關卡</h2>
+            <div class="level-grid" id="levelGrid"></div>
+            <button class="btn btn-secondary close-modal" id="closeLevelModal">關閉</button>
+        </div>
+    </div>
+
+    <div class="modal win-modal" id="winModal">
+        <div class="modal-content">
+            <h2>🎉 恭喜通關！</h2>
+            <p>完成關卡 <span id="winLevel"></span></p>
+            <p>用了 <span id="winSteps"></span> 步</p>
+            <div class="win-buttons">
+                <button class="btn btn-secondary" id="replayBtn">再玩一次</button>
+                <button class="btn btn-primary" id="nextLevelBtn">下一關</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const FLOOR = 0;
+        const WALL = 1;
+        const BOX = 2;
+        const TARGET = 3;
+        const PLAYER = 4;
+        const BOX_ON_TARGET = 5;
+
+        const levels = [
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,1,1],
+                    [1,0,0,0,0,0,2,0,1],
+                    [1,0,1,0,0,1,2,0,1],
+                    [1,0,3,0,3,1,4,0,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 3"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1],
+                    [0,0,1,0,3,3,4,1],
+                    [0,0,1,0,2,2,0,1],
+                    [0,0,1,1,0,1,1,1],
+                    [0,0,0,1,0,1,1,1],
+                    [0,0,0,1,0,1,1,1],
+                    [1,1,1,1,0,1,1,1],
+                    [1,0,0,0,0,1,1,1],
+                    [1,0,1,0,0,0,1,1],
+                    [1,0,0,0,1,0,1,1],
+                    [1,1,1,0,0,0,1,1],
+                    [0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 8"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,3,0,0,1,1],
+                    [1,4,2,2,0,1],
+                    [1,1,0,0,0,1],
+                    [0,1,1,0,0,1],
+                    [0,0,1,1,3,1],
+                    [0,0,0,1,1,1]
+                ],
+                name: "Microban 9"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,0,0,1,1],
+                    [0,0,1,0,1,1,4,1,1],
+                    [1,1,1,0,1,0,2,0,1],
+                    [1,0,3,3,1,0,2,0,1],
+                    [1,0,0,0,0,0,0,0,1],
+                    [1,0,0,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 11"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1,1,1],
+                    [1,0,2,0,0,1,1,1,1],
+                    [1,1,0,2,0,1,1,1,1],
+                    [0,1,1,1,4,3,0,0,1],
+                    [0,0,1,0,0,3,1,0,1],
+                    [0,0,1,0,0,0,0,0,1],
+                    [0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 12"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,1],
+                    [1,3,0,3,0,0,1],
+                    [1,0,1,1,0,1,1],
+                    [1,0,0,2,0,1,1],
+                    [1,1,1,2,0,1,1],
+                    [0,0,1,4,0,1,1],
+                    [0,0,1,0,0,1,1],
+                    [0,0,1,1,1,1,1]
+                ],
+                name: "Microban 18"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,0,3,3,0,1],
+                    [1,0,0,4,2,2,0,1],
+                    [1,1,1,1,1,0,1,1],
+                    [0,0,0,1,0,0,1,1],
+                    [0,0,0,1,0,0,1,1],
+                    [0,0,0,1,0,0,1,1],
+                    [0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 19"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,1,1,1],
+                    [1,0,0,4,2,2,3,3,1],
+                    [1,1,1,1,0,1,1,0,1],
+                    [0,0,1,0,0,0,0,0,1],
+                    [0,0,1,0,0,1,1,1,1],
+                    [0,0,1,0,0,1,1,1,1],
+                    [0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 20"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1],
+                    [1,0,3,0,3,0,1],
+                    [1,0,2,2,1,4,1],
+                    [1,1,0,0,0,0,1],
+                    [0,1,1,1,1,1,1]
+                ],
+                name: "Microban 21"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1],
+                    [1,3,0,3,0,0,1],
+                    [1,0,0,0,1,0,1],
+                    [1,1,0,1,0,0,1],
+                    [0,1,4,2,2,0,1],
+                    [0,1,0,0,0,0,1],
+                    [0,1,0,0,1,1,1],
+                    [0,1,1,1,1,1,1]
+                ],
+                name: "Microban 22"
+            },
+            {
+                map: [
+                    [1,0,1,1,1,1,1],
+                    [0,0,1,0,0,0,1],
+                    [1,1,1,2,2,4,1],
+                    [1,0,0,0,1,1,1],
+                    [1,0,0,0,0,0,1],
+                    [1,0,3,0,3,0,1],
+                    [1,1,1,1,1,1,1]
+                ],
+                name: "Microban 24"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,0,3,1,1],
+                    [1,0,1,1,0,1,1],
+                    [1,0,0,2,2,4,1],
+                    [1,0,1,0,0,0,1],
+                    [1,3,0,0,1,1,1],
+                    [1,1,1,1,1,1,1]
+                ],
+                name: "Microban 27"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1],
+                    [1,0,4,0,1,1,1],
+                    [1,0,2,2,1,1,1],
+                    [1,1,3,0,3,0,1],
+                    [0,1,0,0,0,0,1],
+                    [0,1,1,1,1,1,1]
+                ],
+                name: "Microban 28"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,1,1,1,1,1,1],
+                    [0,0,0,0,0,1,0,0,0,1,1],
+                    [0,0,0,0,0,1,0,0,0,0,1],
+                    [0,1,1,1,1,1,1,0,0,0,1],
+                    [1,1,0,0,0,0,0,1,3,0,1],
+                    [1,0,2,0,2,0,4,0,0,1,1],
+                    [1,0,1,1,1,1,1,1,3,1,1],
+                    [1,0,0,0,0,0,0,0,0,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 29"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1,1,1,1],
+                    [1,0,1,0,1,0,3,1,1,1],
+                    [1,0,0,0,0,2,0,1,1,1],
+                    [1,1,1,0,1,2,3,0,0,1],
+                    [1,0,0,0,1,4,0,0,0,1],
+                    [1,0,1,0,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 39"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,0,0,0,1,1,1],
+                    [1,0,2,0,2,0,0,0,1,1,1],
+                    [1,0,1,1,1,0,1,1,1,1,1],
+                    [1,0,4,0,3,0,3,0,0,0,1],
+                    [1,0,0,0,1,1,1,0,0,0,1],
+                    [1,1,1,1,1,0,1,1,1,1,1]
+                ],
+                name: "Microban 47"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,1,1,1],
+                    [1,0,0,2,0,0,4,3,3,1],
+                    [1,0,2,0,0,0,0,1,0,1],
+                    [1,1,1,0,1,1,1,1,0,1],
+                    [0,0,1,0,0,0,0,0,0,1],
+                    [0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 50"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,0,4,0,1,0,0,1,1,1],
+                    [1,0,0,0,0,0,0,1,1,1],
+                    [1,1,1,1,1,2,0,1,1,1],
+                    [0,0,0,0,1,0,0,1,1,1],
+                    [0,1,1,0,1,2,0,3,3,1],
+                    [0,1,1,0,1,0,0,1,1,1],
+                    [0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 55"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1,1,1,0,3,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,2,0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,1,1,0,3,2,0,0,0,0,4,0,1],
+                    [0,0,1,0,0,1,0,0,1,0,0,1,1,1,1,0,0,0,1],
+                    [0,0,1,1,1,1,0,0,1,1,1,1,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 63"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,1,0,0,0,1,1,1],
+                    [1,0,2,4,2,0,1,0,3,0,0,3,1],
+                    [1,0,1,1,0,1,1,1,0,1,1,0,1],
+                    [1,0,1,0,0,0,0,0,0,0,1,0,1],
+                    [1,0,1,0,0,0,1,0,0,0,1,0,1],
+                    [1,0,1,1,1,1,1,1,1,1,1,0,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 71"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,0,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1,0,0,0,1],
+                    [1,0,2,2,0,0,0,0,0,1,4,1],
+                    [1,0,2,0,1,3,3,3,0,0,0,1],
+                    [1,0,0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 6"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,1,1,1,1,1],
+                    [0,0,0,0,0,0,1,3,0,0,1],
+                    [0,0,0,0,0,0,1,3,1,0,1],
+                    [1,1,1,1,1,1,1,3,1,0,1],
+                    [1,0,4,0,2,0,2,0,2,0,1],
+                    [1,0,1,0,1,0,1,0,1,1,1],
+                    [1,0,0,0,0,0,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 10"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,3,0,1,1,1,1],
+                    [1,3,4,0,1,1,1],
+                    [1,3,0,2,1,1,1],
+                    [1,1,2,0,1,1,1],
+                    [0,1,0,2,0,0,1],
+                    [0,1,0,0,0,0,1],
+                    [0,1,0,0,1,1,1],
+                    [0,1,1,1,1,1,1]
+                ],
+                name: "Microban 13"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,1,1,1],
+                    [1,1,0,1,1,0,0,0,1,1],
+                    [1,3,0,3,1,0,4,2,1,1],
+                    [1,0,0,0,1,0,2,2,0,1],
+                    [1,0,0,3,1,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 16"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,0,4,0,1,1],
+                    [1,3,3,3,1,1],
+                    [1,2,2,2,1,1],
+                    [1,0,0,0,0,1],
+                    [1,0,0,0,0,1],
+                    [1,1,1,1,1,1]
+                ],
+                name: "Microban 17"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1],
+                    [0,1,0,0,1,1,1],
+                    [0,1,0,2,2,0,1],
+                    [1,1,3,3,3,0,1],
+                    [1,0,0,4,2,0,1],
+                    [1,0,0,0,1,1,1],
+                    [1,1,1,1,1,1,1]
+                ],
+                name: "Microban 25"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1],
+                    [0,1,0,4,0,1],
+                    [0,1,0,0,0,1],
+                    [1,1,1,2,0,1],
+                    [1,0,3,3,3,1],
+                    [1,0,2,2,0,1],
+                    [1,1,1,0,0,1],
+                    [0,0,1,1,1,1]
+                ],
+                name: "Microban 26"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,0,0,1,1,1],
+                    [1,0,2,2,0,1],
+                    [1,3,3,3,0,1],
+                    [1,0,4,2,0,1],
+                    [1,0,0,0,1,1],
+                    [1,1,1,1,1,1]
+                ],
+                name: "Microban 30"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1],
+                    [0,1,1,0,0,1,1],
+                    [1,1,4,2,3,1,1],
+                    [1,0,2,2,0,0,1],
+                    [1,0,3,0,3,0,1],
+                    [1,1,1,0,0,0,1],
+                    [0,0,1,1,1,1,1]
+                ],
+                name: "Microban 31"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,3,0,1,0,0,1],
+                    [1,0,0,2,0,0,1],
+                    [1,3,0,2,1,4,1],
+                    [1,0,0,2,0,0,1],
+                    [1,3,0,1,0,0,1],
+                    [1,1,1,1,1,1,1]
+                ],
+                name: "Microban 33"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,1,1,1],
+                    [1,1,1,1,1,0,1,3,1],
+                    [1,0,0,0,1,1,1,3,1],
+                    [1,0,0,0,2,0,1,3,1],
+                    [1,0,2,0,0,2,0,0,1],
+                    [1,1,1,1,1,4,1,0,1],
+                    [0,0,0,0,1,0,0,0,1],
+                    [0,0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 37"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,1],
+                    [1,0,1,1,3,1,1,1,0,1],
+                    [1,0,1,0,2,2,0,3,0,1],
+                    [1,0,3,0,4,2,1,1,0,1],
+                    [1,1,1,1,1,0,0,0,0,1],
+                    [0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 38"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,1,1],
+                    [1,4,2,2,2,0,1,1],
+                    [1,0,0,1,3,3,3,1],
+                    [1,1,0,0,0,0,1,1],
+                    [0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 41"
+            },
+            {
+                map: [
+                    [0,0,0,1,1,1,1],
+                    [0,0,0,1,0,0,1],
+                    [0,0,0,1,4,0,1],
+                    [1,1,1,1,2,3,1],
+                    [1,0,0,0,2,3,1],
+                    [1,0,1,0,2,3,1],
+                    [1,0,0,0,0,1,1],
+                    [1,1,1,1,1,1,1]
+                ],
+                name: "Microban 42"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,1,1,1,1],
+                    [0,0,0,0,0,1,0,4,1],
+                    [0,0,0,0,0,1,0,0,1],
+                    [1,1,1,1,1,1,0,3,1],
+                    [1,0,0,0,2,0,0,3,1],
+                    [1,0,0,2,2,1,0,3,1],
+                    [1,0,0,0,0,1,1,1,1],
+                    [1,1,1,0,0,1,1,1,1],
+                    [0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 43"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1],
+                    [1,3,3,3,0,1],
+                    [1,0,0,2,0,1],
+                    [1,0,1,2,1,1],
+                    [1,0,0,2,0,1],
+                    [1,0,0,4,0,1],
+                    [1,1,1,1,1,1]
+                ],
+                name: "Microban 45"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,4,0,1,1,1],
+                    [1,0,0,1,0,1,1,1],
+                    [1,0,3,1,0,0,1,1],
+                    [1,0,3,2,2,2,0,1],
+                    [1,0,3,1,0,0,0,1],
+                    [1,1,1,1,0,0,0,1],
+                    [0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 48"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,4,0,0,1,1,1],
+                    [1,0,2,1,0,1,1,1],
+                    [1,0,2,0,0,1,1,1],
+                    [1,0,2,0,1,1,1,1],
+                    [1,1,1,0,1,1,1,1],
+                    [0,1,0,0,1,0,0,1],
+                    [0,1,3,3,3,0,0,1],
+                    [0,1,0,0,0,0,0,1],
+                    [0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 49"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,0,0,0,1,1],
+                    [1,0,1,1,1,1,1,1,1,0,4,1,1],
+                    [1,0,1,0,0,0,0,0,0,0,0,0,1],
+                    [1,0,1,0,0,2,0,0,0,1,0,0,1],
+                    [1,0,2,2,0,1,1,1,1,1,0,0,1],
+                    [1,1,1,0,0,1,0,1,0,3,3,3,1],
+                    [0,0,1,1,1,1,0,1,0,0,0,0,1],
+                    [0,0,0,0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 59"
+            },
+            {
+                map: [
+                    [0,0,0,1,1,1,1,1,1],
+                    [0,0,0,1,4,1,1,1,1],
+                    [0,1,1,1,2,1,1,1,1],
+                    [1,1,0,0,3,0,0,1,1],
+                    [1,0,0,1,0,1,0,0,1],
+                    [1,0,1,0,0,0,1,0,1],
+                    [1,0,1,0,0,0,1,0,1],
+                    [1,0,1,0,0,0,1,0,1],
+                    [1,0,0,1,0,1,0,0,1],
+                    [1,1,0,2,0,2,0,1,1],
+                    [0,1,1,3,0,3,1,1,1],
+                    [0,0,1,0,0,0,1,1,1],
+                    [0,0,1,0,0,0,1,1,1],
+                    [0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 66"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,1,1,1,1,1,1],
+                    [1,1,0,0,0,0,2,0,0,1],
+                    [1,0,3,1,0,2,0,0,0,1],
+                    [1,0,3,1,2,1,1,1,1,1],
+                    [1,0,3,4,0,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 68"
+            },
+            {
+                map: [
+                    [1,1,1,1,0,0,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,0,0,1,1],
+                    [1,0,0,1,0,0,1,0,0,1,1],
+                    [1,0,0,1,0,0,0,0,2,1,1],
+                    [1,0,0,3,0,3,1,2,0,0,1],
+                    [1,4,0,1,1,0,1,0,2,0,1],
+                    [1,0,0,0,3,0,1,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 69"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1,1],
+                    [0,1,1,0,0,1,1,1,1,1],
+                    [0,1,0,0,2,0,0,4,0,1],
+                    [0,1,0,0,2,1,0,0,0,1],
+                    [1,1,1,1,0,1,1,1,1,1],
+                    [1,0,0,1,0,0,0,1,1,1],
+                    [1,0,0,0,0,2,0,1,1,1],
+                    [1,0,3,3,1,0,0,1,1,1],
+                    [1,0,0,3,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 72"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,1],
+                    [1,0,2,2,0,2,0,1],
+                    [1,0,0,0,0,0,0,1],
+                    [1,1,0,1,1,0,1,1],
+                    [1,3,3,3,1,4,1,1],
+                    [1,0,1,1,1,0,1,1],
+                    [1,0,0,0,0,0,0,1],
+                    [1,0,0,1,0,0,0,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 73"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,0,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1,1,1],
+                    [1,0,0,1,3,1,0,0,0,1],
+                    [1,4,0,1,3,1,0,2,0,1],
+                    [1,0,0,1,3,1,0,0,1,1],
+                    [1,0,0,0,0,1,0,0,1,1],
+                    [1,1,0,0,1,1,2,2,1,1],
+                    [0,1,1,0,0,0,0,0,1,1],
+                    [0,0,1,0,0,1,1,1,1,1],
+                    [0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 76"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,1,0,0,1],
+                    [1,1,0,2,1,2,1,0,0,1],
+                    [1,0,0,3,2,3,4,0,0,1],
+                    [1,0,0,3,1,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 79"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,3,3,3,0,1,1,1,1,1],
+                    [1,0,0,1,1,1,0,1,1,1,1,1],
+                    [1,0,0,1,0,2,0,0,1,1,1,1],
+                    [1,1,0,1,4,2,0,0,1,1,1,1],
+                    [0,1,0,1,0,2,0,0,1,1,1,1],
+                    [0,1,0,1,1,1,0,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,1,1,1,0,0,0,1],
+                    [0,1,1,1,1,1,0,1,1,1,1,1]
+                ],
+                name: "Microban 84"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,0,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,0,0,1],
+                    [0,1,0,2,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,2,0,2,0,0,1],
+                    [0,1,0,1,1,1,1,1,1,1,1],
+                    [1,1,0,1,0,3,0,0,1,1,1],
+                    [1,0,0,1,0,1,0,0,1,1,1],
+                    [1,0,0,4,0,3,0,1,1,1,1],
+                    [1,1,0,1,0,1,0,1,1,1,1],
+                    [0,1,0,0,0,3,0,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 85"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,1,1,1,1,1,1],
+                    [0,1,0,1,1,1,0,0,1,1,1],
+                    [0,1,0,1,0,0,0,0,1,1,1],
+                    [0,1,0,1,0,0,1,0,1,1,1],
+                    [0,1,0,1,2,0,1,3,1,1,1],
+                    [0,1,0,1,0,0,1,0,1,0,1],
+                    [0,1,0,1,2,0,1,3,1,0,1],
+                    [0,0,0,1,0,0,1,0,1,0,1],
+                    [1,1,1,1,2,0,1,3,1,0,1],
+                    [1,0,4,0,0,0,0,0,1,0,1],
+                    [1,0,0,0,1,0,0,1,1,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 88"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,1,0,0,0,0,1,1,1,1,1],
+                    [0,0,1,0,0,1,0,0,0,0,1,0,0,0,1],
+                    [0,0,1,0,0,1,1,1,1,1,1,3,1,0,1],
+                    [1,1,1,1,0,0,2,0,0,0,0,3,0,0,1],
+                    [1,0,0,0,2,2,1,0,1,1,1,3,1,0,1],
+                    [1,0,0,0,1,0,0,0,1,0,1,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,0,1,4,0,1,1],
+                    [0,0,0,0,0,0,0,0,0,0,1,0,0,1,1],
+                    [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 92"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,4,0,1,0,0,0,1],
+                    [1,0,2,0,2,0,0,0,1],
+                    [1,1,2,1,1,1,0,1,1],
+                    [1,0,0,3,3,3,0,0,1],
+                    [1,0,0,0,1,0,0,0,1],
+                    [1,1,1,1,1,1,0,0,1],
+                    [0,0,0,0,0,1,1,1,1]
+                ],
+                name: "Microban 94"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,0,0,1,1,1,1],
+                    [0,0,1,0,0,0,0,1,1,1,1],
+                    [1,1,1,1,1,0,0,1,1,1,1],
+                    [1,0,0,0,1,3,1,1,1,1,1],
+                    [1,0,0,0,2,4,2,0,0,0,1],
+                    [1,1,1,1,1,3,1,0,0,0,1],
+                    [0,0,0,1,1,0,1,1,0,1,1],
+                    [0,0,0,1,0,0,0,2,3,1,1],
+                    [0,0,0,1,0,0,0,1,1,1,1],
+                    [0,0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 96"
+            },
+            {
+                map: [
+                    [0,0,0,0,1,1,1,1,1],
+                    [1,1,1,1,1,0,0,0,1],
+                    [1,0,0,0,0,2,0,0,1],
+                    [1,0,0,2,1,2,1,4,1],
+                    [1,1,1,0,1,0,0,0,1],
+                    [0,0,1,0,3,3,3,0,1],
+                    [0,0,1,1,1,0,0,1,1],
+                    [0,0,0,0,1,0,0,1,1],
+                    [0,0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 104"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,0,0,1,1],
+                    [0,1,1,0,1,1,0,0,1],
+                    [0,1,0,2,2,0,1,0,1],
+                    [0,1,0,4,2,0,1,0,1],
+                    [0,1,0,0,0,0,1,0,1],
+                    [1,1,1,1,0,1,0,0,1],
+                    [1,0,0,3,3,3,0,1,1],
+                    [1,0,0,0,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 119"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,1,0,0,0,0,0,1],
+                    [1,0,2,4,2,2,0,1,0,3,0,3,3,1],
+                    [1,1,0,1,1,0,1,1,1,0,1,1,0,1],
+                    [0,1,0,1,0,0,0,0,0,0,0,1,0,1],
+                    [0,1,0,1,0,0,0,1,0,0,0,1,0,1],
+                    [0,1,0,1,1,1,1,1,1,1,1,1,0,1],
+                    [0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 124"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,0,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,0,0,0,1],
+                    [1,3,0,0,0,3,0,0,4,1,3,1],
+                    [1,0,0,1,1,1,0,0,0,0,0,1],
+                    [1,1,0,2,0,0,1,0,0,0,0,1],
+                    [0,1,0,2,0,0,0,1,1,1,1,1],
+                    [0,1,0,2,1,0,0,1,1,1,1,1],
+                    [0,1,1,0,1,0,0,1,1,1,1,1],
+                    [0,0,1,0,0,0,1,1,1,1,1,1],
+                    [0,0,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 147"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,1],
+                    [0,1,0,3,2,3,0,1],
+                    [1,1,0,2,4,2,0,1],
+                    [1,0,0,3,2,3,0,1],
+                    [1,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 5"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,1,1,1,1,1,1],
+                    [0,0,0,0,0,0,1,0,0,0,0,1],
+                    [0,0,1,1,1,1,1,0,3,0,0,1],
+                    [1,1,1,0,0,1,1,1,3,0,0,1],
+                    [1,0,2,0,0,2,0,0,3,0,1,1],
+                    [1,0,4,2,2,0,1,0,3,0,1,1],
+                    [1,1,0,0,0,0,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 54"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,0,0,1],
+                    [1,1,4,1,1,1,1,1,0,1],
+                    [1,0,0,1,0,0,0,1,0,1],
+                    [1,0,0,1,0,0,0,2,3,1],
+                    [1,0,0,1,1,2,1,1,3,1],
+                    [1,1,2,1,1,0,0,1,3,1],
+                    [1,0,0,0,2,0,0,1,3,1],
+                    [1,0,0,0,1,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 60"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,1,1],
+                    [1,0,1,1,1,1,0,1,1],
+                    [1,0,1,3,3,3,4,1,1],
+                    [1,0,1,1,1,2,1,1,1],
+                    [1,0,1,0,0,0,0,0,1],
+                    [1,0,0,2,2,0,2,0,1],
+                    [1,1,1,1,0,0,0,1,1],
+                    [0,0,0,1,3,1,1,1,1],
+                    [0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 61"
+            },
+            {
+                map: [
+                    [0,0,0,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,0,0,0,0,1,1,0,0,1],
+                    [1,0,0,2,2,2,3,3,3,3,2,4,1],
+                    [1,0,0,0,0,0,0,1,1,1,0,0,1],
+                    [1,0,0,0,1,1,1,1,0,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 62"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,0,0,1,1,1,1],
+                    [1,0,0,0,2,0,1,1,1,1],
+                    [1,0,0,2,2,0,1,1,1,1],
+                    [1,1,1,0,3,1,1,1,1,1],
+                    [0,0,1,1,3,1,0,4,0,1],
+                    [0,0,0,1,3,0,0,2,0,1],
+                    [0,0,0,1,3,0,1,1,1,1],
+                    [0,0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 64"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,0,0,1,1],
+                    [0,0,1,0,0,2,0,1,1],
+                    [0,1,1,1,1,2,0,1,1],
+                    [1,1,0,2,0,2,0,1,1],
+                    [1,3,3,3,3,1,0,1,1],
+                    [1,0,0,0,0,0,4,0,1],
+                    [1,1,0,0,1,0,0,0,1],
+                    [0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 65"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,4,0,1,1,1,1],
+                    [1,0,0,0,0,0,0,1],
+                    [1,0,2,0,2,2,0,1],
+                    [1,1,2,1,1,0,0,1],
+                    [1,0,0,0,1,1,1,1],
+                    [1,0,3,3,0,0,1,1],
+                    [1,1,3,3,0,0,1,1],
+                    [0,1,1,1,0,0,1,1],
+                    [0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 70"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,1,1,1,1,1,1,1],
+                    [0,1,2,0,4,1,0,0,0,3,1],
+                    [1,1,0,1,2,2,0,0,0,3,1],
+                    [1,0,0,2,0,0,1,1,3,3,1],
+                    [1,0,0,0,1,0,1,1,1,1,1],
+                    [1,1,1,0,0,0,1,1,1,1,1],
+                    [0,0,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 74"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,3,3,3,3,1,1,1],
+                    [1,0,0,0,1,1,1,1,1,1],
+                    [1,0,0,0,2,0,2,0,4,1],
+                    [1,1,1,0,0,2,0,2,0,1],
+                    [0,0,1,1,1,0,0,0,0,1],
+                    [0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 75"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,4,0,3,3,3,3,0,1,1],
+                    [1,0,0,0,1,1,1,1,2,1,1],
+                    [1,1,0,1,0,0,2,0,2,0,1],
+                    [0,1,0,2,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 77"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,1,1,1],
+                    [1,0,0,3,0,1,1,0,3,1],
+                    [1,0,2,1,0,0,0,0,3,1],
+                    [1,1,0,1,1,0,1,0,3,1],
+                    [0,1,0,0,0,0,1,0,0,1],
+                    [0,1,1,1,1,0,1,0,0,1],
+                    [0,0,1,0,4,2,0,1,1,1],
+                    [0,0,1,0,2,2,0,1,1,1],
+                    [0,0,1,0,0,0,0,1,1,1],
+                    [0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 80"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1],
+                    [1,0,2,0,2,0,1,1],
+                    [1,1,0,2,2,0,0,1],
+                    [0,1,0,1,0,0,0,1],
+                    [0,1,0,1,1,0,1,1],
+                    [0,1,0,0,3,0,3,1],
+                    [0,1,0,4,3,0,3,1],
+                    [0,1,0,0,1,1,1,1],
+                    [0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 83"
+            },
+            {
+                map: [
+                    [0,0,0,0,1,1,1,1,1],
+                    [0,0,1,1,1,0,0,1,1],
+                    [0,1,1,0,2,0,0,0,1],
+                    [1,1,0,2,0,0,1,0,1],
+                    [1,0,4,1,2,2,0,0,1],
+                    [1,0,3,3,0,0,1,1,1],
+                    [1,0,3,3,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 86"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,1,1,1,1],
+                    [1,1,1,1,1,1,0,0,1],
+                    [1,0,0,0,0,0,0,0,1],
+                    [1,0,0,3,3,3,0,3,1],
+                    [1,1,2,1,1,1,1,1,1],
+                    [1,0,2,0,0,1,1,1,1],
+                    [1,0,0,0,2,1,1,1,1],
+                    [1,1,0,0,2,0,0,1,1],
+                    [0,1,1,0,4,0,0,1,1],
+                    [0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 87"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,0,0,0,1],
+                    [1,0,2,0,0,2,4,1,0,1],
+                    [1,1,1,1,0,1,0,2,0,1],
+                    [0,0,0,1,3,1,0,0,1,1],
+                    [0,1,0,1,3,1,0,2,1,1],
+                    [0,1,0,1,3,0,0,0,1,1],
+                    [0,1,0,1,3,0,0,0,1,1],
+                    [0,0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 89"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,4,0,0,0,1,1],
+                    [0,1,0,2,0,0,2,0,1,1],
+                    [1,1,1,0,1,1,0,1,1,1],
+                    [1,0,0,2,3,3,2,0,0,1],
+                    [1,0,0,0,3,3,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 90"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,3,1,1,0,0,1],
+                    [1,0,2,2,4,3,3,2,2,0,1],
+                    [1,0,0,0,1,1,3,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 91"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1],
+                    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,1,0,1,1,1],
+                    [1,0,0,0,0,0,1,0,0,1,0,0,1,0,0,0,0,0,0,1,1,1],
+                    [1,0,0,4,0,0,1,1,1,1,0,0,1,0,0,0,0,0,1,1,1,1],
+                    [1,0,0,1,0,0,0,0,3,3,3,3,1,1,0,1,1,1,1,0,0,1],
+                    [1,0,0,0,0,1,1,1,1,1,0,1,1,0,2,2,0,2,0,2,0,1],
+                    [1,1,1,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [0,0,0,0,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 99"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,4,1,0,0,1,1],
+                    [1,3,2,0,0,0,1,1],
+                    [1,3,0,1,0,2,1,1],
+                    [1,3,2,1,0,0,0,1],
+                    [1,3,0,1,0,2,0,1],
+                    [1,0,0,1,0,0,0,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 100"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,3,3,3,3,1,0,0,0,0,1],
+                    [1,0,0,1,0,0,0,2,2,0,1],
+                    [1,0,0,4,0,0,1,1,0,0,1],
+                    [1,0,0,0,0,0,1,1,2,0,1],
+                    [1,1,1,1,1,1,0,0,2,0,1],
+                    [0,0,0,0,0,1,0,0,0,0,1],
+                    [0,0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 102"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1],
+                    [0,0,1,0,3,0,1,1],
+                    [1,1,1,0,2,0,0,1],
+                    [1,0,3,0,2,1,4,1],
+                    [1,0,1,2,0,3,0,1],
+                    [1,0,0,2,0,1,1,1],
+                    [1,1,0,3,0,1,1,1],
+                    [0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 103"
+            },
+            {
+                map: [
+                    [1,1,1,1,0,0,0,0,0,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,0,0,0,1,0,0,0,1,1],
+                    [1,0,0,0,0,1,0,0,0,1,2,0,2,0,1],
+                    [1,3,3,1,0,1,1,1,1,1,0,1,0,0,1],
+                    [1,0,0,4,0,0,0,0,1,0,2,0,2,0,1],
+                    [1,3,3,1,0,0,0,0,0,0,0,0,0,1,1],
+                    [1,1,0,0,0,1,1,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 108"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,1,1,1,1],
+                    [0,0,1,0,2,1,1,1,1],
+                    [1,1,1,3,0,3,0,0,1],
+                    [1,0,2,0,1,0,2,0,1],
+                    [1,0,0,3,0,3,1,1,1],
+                    [1,1,1,1,2,0,1,1,1],
+                    [0,0,0,1,0,4,1,1,1],
+                    [0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 110"
+            },
+            {
+                map: [
+                    [0,0,0,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,1,1,0,0,0,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,0,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,3,0,1,1,1,1,1,1,1],
+                    [1,0,0,1,1,0,1,1,1,1,1,1,1,1],
+                    [1,0,0,3,0,3,0,1,0,0,1,1,1,1],
+                    [1,0,0,1,0,4,0,2,0,0,0,1,1,1],
+                    [1,1,1,1,1,3,0,1,0,0,2,0,0,1],
+                    [0,0,0,0,1,1,1,1,0,0,2,0,0,1],
+                    [0,0,0,0,0,0,0,1,1,0,2,0,1,1],
+                    [0,0,0,0,0,0,0,0,1,0,0,1,1,1],
+                    [0,0,0,0,0,0,0,0,1,0,0,1,1,1],
+                    [0,0,0,0,0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 113"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,0,1,1,1,1,1],
+                    [1,0,0,2,0,0,1,1,1,1],
+                    [1,0,2,0,2,0,0,1,1,1],
+                    [1,1,1,2,1,0,3,0,1,1],
+                    [0,0,1,0,1,0,3,0,0,1],
+                    [0,1,1,0,1,1,3,0,0,1],
+                    [0,1,0,4,0,0,3,0,1,1],
+                    [0,1,0,0,0,1,0,0,1,1],
+                    [0,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 118"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,0,0,1,1],
+                    [1,0,2,0,0,0,0,0,0,1,1],
+                    [1,0,2,1,1,1,1,1,0,0,1],
+                    [1,0,0,4,1,0,0,1,0,0,1],
+                    [1,1,0,1,1,3,3,0,0,0,1],
+                    [1,0,0,1,0,3,3,1,1,1,1],
+                    [1,0,2,0,0,1,1,1,1,1,1],
+                    [1,0,2,1,1,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 120"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,1,1,1,1,1,1,1],
+                    [0,0,0,0,0,0,1,0,0,0,1,1,1],
+                    [0,0,0,0,0,0,1,0,2,0,0,1,1],
+                    [1,1,1,1,1,1,1,1,0,1,4,1,1],
+                    [1,0,3,0,0,1,0,2,0,2,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,2,1,0,1],
+                    [1,3,3,3,1,1,1,1,1,0,0,0,1],
+                    [1,1,1,1,1,0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 125"
+            },
+            {
+                map: [
+                    [1,1,0,1,1,1,1,1,1,1],
+                    [1,1,1,1,0,0,1,1,1,1],
+                    [0,1,0,2,0,2,3,0,0,1],
+                    [1,1,0,1,0,0,3,2,0,1],
+                    [1,0,0,0,1,1,3,1,1,1],
+                    [1,0,0,2,0,0,3,0,1,1],
+                    [1,0,4,0,1,0,0,0,1,1],
+                    [1,0,0,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 127"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,0,0,1,1,1,1,1],
+                    [1,0,0,0,1,1,1,1,3,3,0,1],
+                    [1,0,2,2,2,0,0,0,0,0,0,1],
+                    [1,0,0,0,2,1,0,0,3,3,0,1],
+                    [1,1,1,0,4,1,0,0,1,1,0,1],
+                    [0,0,1,0,0,1,1,0,0,0,0,1],
+                    [0,0,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 130"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1],
+                    [1,0,3,0,1,1,1],
+                    [1,3,4,3,1,1,1],
+                    [1,1,3,1,0,0,1],
+                    [1,0,0,2,0,0,1],
+                    [1,0,2,0,0,0,1],
+                    [1,1,2,2,0,0,1],
+                    [0,1,0,0,1,1,1],
+                    [0,1,0,0,1,1,1],
+                    [0,1,1,1,1,1,1]
+                ],
+                name: "Microban 131"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,0,0,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,0,0,1],
+                    [1,0,0,0,1,1,0,2,0,0,0,1],
+                    [1,0,0,2,0,0,0,1,1,0,0,1],
+                    [1,1,1,0,1,3,0,3,1,0,1,1],
+                    [0,0,1,0,1,3,0,3,1,2,1,1],
+                    [0,0,1,0,1,0,0,0,1,0,0,1],
+                    [0,0,1,0,4,0,2,0,0,0,0,1],
+                    [0,0,1,0,0,1,1,1,1,1,1,1],
+                    [0,0,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 134"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,1,1,1,1,1],
+                    [1,0,2,2,1,4,1,1,3,3,1],
+                    [1,0,1,0,0,0,0,0,0,0,1],
+                    [1,0,0,2,0,1,0,1,0,0,1],
+                    [1,1,1,1,0,2,0,0,3,3,1],
+                    [0,0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 135"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,1,1],
+                    [1,1,0,1,1,1,2,1,1],
+                    [1,3,2,0,0,0,4,0,1],
+                    [1,0,3,3,0,1,2,0,1],
+                    [1,3,1,1,0,0,2,0,1],
+                    [1,0,0,0,0,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 136"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,0,0,1,1,1,1,1,1],
+                    [0,0,0,0,0,0,1,1,0,0,1,1,1],
+                    [1,1,1,1,0,0,1,0,0,2,0,0,1],
+                    [1,0,0,1,1,1,1,0,2,0,2,0,1],
+                    [1,0,0,0,3,3,1,0,1,2,0,0,1],
+                    [1,0,0,1,0,0,0,4,0,0,1,1,1],
+                    [1,1,0,1,3,3,1,0,1,1,1,1,1],
+                    [0,1,0,1,1,0,1,0,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,0,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 137"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,0,1,1,1,1,1],
+                    [1,0,0,1,0,0,0,1,1,1,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,1,0,2,0,0,1],
+                    [1,3,1,0,4,0,1,1,0,2,0,0,1,1],
+                    [1,3,1,0,0,0,1,0,2,0,0,1,1,1],
+                    [1,3,1,0,0,0,0,2,0,0,1,1,1,1],
+                    [1,3,0,1,1,0,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,0,0,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 140"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [0,0,1,0,0,1,1,1,1],
+                    [0,0,1,0,0,1,1,1,1],
+                    [1,1,1,2,3,2,0,0,1],
+                    [1,0,0,3,4,3,0,0,1],
+                    [1,0,0,2,3,2,1,1,1],
+                    [1,1,1,1,0,0,1,1,1],
+                    [0,0,0,1,0,0,1,1,1],
+                    [0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 142"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,3,0,0,1,0,0,0,1,1,1,1,1],
+                    [1,0,1,3,0,0,4,0,0,0,1,1,1,1,1],
+                    [1,0,0,1,3,3,1,0,1,1,1,1,1,1,1],
+                    [1,1,0,0,1,1,0,2,2,0,2,0,2,0,1],
+                    [0,1,1,0,0,0,0,0,0,0,0,0,0,0,1],
+                    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 148"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,1,1,1,1,1,1],
+                    [1,4,2,0,0,0,1,1,1,1],
+                    [1,1,1,0,2,0,1,1,1,1],
+                    [0,1,0,0,1,1,1,1,1,1],
+                    [0,1,0,0,2,3,3,3,3,1],
+                    [0,1,0,0,1,0,1,1,1,1],
+                    [0,1,1,0,1,0,1,1,1,1],
+                    [0,1,0,2,1,0,1,1,1,1],
+                    [0,1,0,0,0,0,1,1,1,1],
+                    [0,1,0,0,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 149"
+            },
+            {
+                map: [
+                    [0,0,0,1,1,1,1,1,1,1,1,1],
+                    [0,0,0,1,0,0,1,1,1,1,1,1],
+                    [0,1,1,1,0,0,1,1,1,1,1,1],
+                    [1,1,0,0,2,0,1,1,1,1,1,1],
+                    [1,0,0,0,1,0,1,1,1,1,1,1],
+                    [1,0,1,2,2,0,1,1,1,1,1,1],
+                    [1,0,1,0,0,0,1,0,0,0,3,1],
+                    [1,0,0,2,0,0,4,0,0,0,3,1],
+                    [1,1,1,0,0,1,1,1,1,3,3,1],
+                    [0,0,1,1,1,1,0,0,1,1,1,1]
+                ],
+                name: "Microban 151"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1],
+                    [0,1,1,0,0,1,1],
+                    [0,1,3,0,2,1,1],
+                    [0,1,3,2,0,1,1],
+                    [0,1,3,2,0,1,1],
+                    [0,1,3,2,0,1,1],
+                    [0,1,3,0,2,1,1],
+                    [0,1,0,0,0,4,1],
+                    [0,1,1,0,0,0,1],
+                    [0,0,1,1,1,1,1]
+                ],
+                name: "Microban 35"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,2,0,2,0,2,0,2,0,2,0,4,0,1],
+                    [1,0,3,3,3,3,3,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 36"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,0,0,0,1,1,1,1],
+                    [1,0,0,2,0,2,0,0,1,1,1],
+                    [1,0,2,0,2,0,2,0,1,1,1],
+                    [1,1,0,1,1,1,0,1,1,1,1],
+                    [0,1,4,0,0,3,3,3,3,3,1],
+                    [0,1,1,0,0,0,0,0,1,1,1],
+                    [0,0,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 78"
+            },
+            {
+                map: [
+                    [0,0,0,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,0,1,0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,0,2,0,2,3,3,3,3,3,1],
+                    [1,0,0,0,2,0,0,0,1,1,1,1,1,1],
+                    [1,4,1,1,1,0,1,1,1,1,1,1,1,1],
+                    [1,0,0,2,0,0,1,1,1,1,1,1,1,1],
+                    [1,0,2,0,1,0,1,1,1,1,1,1,1,1],
+                    [1,1,0,1,0,0,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 97"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,0,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,2,0,1,1,1,0,3,1,1,1,1,1,1],
+                    [1,0,2,0,0,0,2,0,0,3,1,1,1,1,1,1],
+                    [1,1,0,2,1,1,1,1,1,3,1,0,1,1,1,1],
+                    [1,0,2,0,0,1,0,1,0,3,1,1,1,0,0,1],
+                    [1,0,0,0,0,1,0,1,0,3,1,0,0,4,0,1],
+                    [1,1,1,0,0,1,0,1,0,0,0,0,0,0,0,1],
+                    [0,0,1,1,1,1,0,1,1,0,0,0,0,0,1,1],
+                    [0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 98"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,0,1,1],
+                    [0,1,4,0,0,0,2,0,1,1],
+                    [1,1,0,1,1,1,2,0,1,1],
+                    [1,0,3,3,3,3,3,1,1,1],
+                    [1,0,2,0,2,0,2,0,0,1],
+                    [1,1,1,1,1,1,0,1,0,1],
+                    [0,0,0,0,0,1,0,0,0,1],
+                    [0,0,0,0,0,1,1,1,1,1]
+                ],
+                name: "Microban 106"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1],
+                    [1,0,1,0,0,0,0,0,1],
+                    [1,0,1,0,1,0,1,0,1],
+                    [0,0,1,0,4,0,2,0,1],
+                    [1,1,1,0,1,1,1,0,1],
+                    [1,0,0,0,1,1,1,0,1],
+                    [1,0,2,0,0,1,1,3,1],
+                    [1,1,0,2,0,0,1,3,1],
+                    [0,1,1,0,2,0,0,3,1],
+                    [1,0,1,1,0,2,1,3,1],
+                    [1,1,0,1,1,0,1,3,1],
+                    [1,1,1,0,1,0,0,0,1],
+                    [1,1,1,0,1,1,1,1,1]
+                ],
+                name: "Microban 109"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,0,1,1,1,1,1],
+                    [1,0,0,2,2,2,0,0,1,1],
+                    [1,0,1,0,0,0,2,0,1,1],
+                    [1,0,0,0,2,1,1,0,1,1],
+                    [1,1,1,0,0,1,3,0,0,1],
+                    [0,0,1,0,0,1,0,0,0,1],
+                    [0,1,1,1,1,1,0,1,1,1],
+                    [0,1,0,0,0,1,0,1,1,1],
+                    [0,1,0,4,3,3,3,3,1,1],
+                    [0,1,0,0,0,0,0,0,1,1],
+                    [0,1,0,0,0,1,0,0,1,1],
+                    [0,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 112"
+            },
+            {
+                map: [
+                    [0,0,0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,0,0,0,1,1,1,1],
+                    [1,0,0,0,0,0,1,0,0,0,0,1],
+                    [1,0,0,1,3,3,3,3,3,0,0,1],
+                    [1,1,0,0,1,1,0,1,0,1,1,1],
+                    [0,1,2,2,4,2,2,2,0,1,1,1],
+                    [0,1,0,0,0,0,0,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 115"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,1,1,1,1,1],
+                    [0,0,0,1,1,1,0,0,0,1],
+                    [1,1,1,1,3,3,3,3,3,1],
+                    [1,0,4,2,2,2,2,2,0,1],
+                    [1,0,0,0,0,0,1,0,1,1],
+                    [1,1,1,1,1,0,0,0,1,1],
+                    [0,0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 116"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,0,1,1,1,1,1],
+                    [0,1,0,0,1,1,1,0,0,1,1],
+                    [0,1,0,0,0,0,0,0,4,0,1],
+                    [1,1,3,3,1,1,1,0,0,0,1],
+                    [1,0,0,0,0,0,0,1,0,0,1],
+                    [1,3,3,3,1,2,0,0,1,0,1],
+                    [1,0,1,1,0,2,2,0,2,0,1],
+                    [1,0,0,2,0,0,0,0,1,1,1],
+                    [1,1,1,1,0,0,1,1,1,1,1],
+                    [0,0,0,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 117"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,1,1,1,1,1,1],
+                    [1,0,1,2,0,0,1,1,1,1,1],
+                    [1,0,2,0,0,0,1,1,1,1,1],
+                    [1,0,2,0,2,0,1,1,1,1,1],
+                    [1,0,2,1,0,0,1,1,1,1,1],
+                    [1,0,0,4,1,1,1,1,1,1,1],
+                    [1,1,0,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,3,3,3,1],
+                    [1,0,0,0,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,3,3,1],
+                    [0,0,0,0,0,0,0,1,1,1,1]
+                ],
+                name: "Microban 122"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,1,1,1,1,1,1,1,1],
+                    [1,0,2,0,2,2,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,0,4,1,1,3,0,3,0,0,1],
+                    [0,0,0,0,1,2,0,0,1,0,3,0,0,0,1],
+                    [0,0,0,0,1,0,0,0,1,3,0,3,0,1,1],
+                    [0,0,0,0,1,2,1,0,1,1,0,1,0,1,1],
+                    [0,0,0,0,1,0,0,0,0,0,0,0,0,1,1],
+                    [0,0,0,0,1,0,0,1,1,1,0,0,1,1,1],
+                    [0,0,0,0,1,0,0,1,0,1,1,1,1,1,1],
+                    [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 123"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1],
+                    [0,1,0,0,3,0,3,1,1,1],
+                    [0,1,0,3,0,3,0,3,0,1],
+                    [1,1,1,0,1,1,1,1,0,1],
+                    [1,0,0,4,2,0,0,2,0,1],
+                    [1,0,0,2,2,0,0,2,0,1],
+                    [1,1,1,1,0,0,0,1,1,1],
+                    [0,0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 133"
+            },
+            {
+                map: [
+                    [0,0,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1,1,1,1,1],
+                    [1,0,1,0,3,0,3,1,1,1,1,1],
+                    [1,0,4,0,3,3,3,1,1,1,1,1],
+                    [1,0,1,0,1,0,1,0,0,0,1,1],
+                    [1,0,0,0,1,0,2,2,0,0,0,1],
+                    [1,1,1,1,1,0,0,2,0,2,0,1],
+                    [0,0,0,0,1,1,2,0,1,0,1,1],
+                    [0,0,0,0,0,1,0,0,0,0,1,1],
+                    [0,0,0,0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 138"
+            },
+            {
+                map: [
+                    [0,0,0,0,0,1,1,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,0,0,1,1,1,1,1,1,1],
+                    [0,1,0,0,0,0,0,2,1,1,1,1,1,1,1],
+                    [1,1,0,1,1,0,3,3,1,0,0,3,3,3,1],
+                    [1,0,2,0,2,2,1,2,0,0,4,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,0,1,1,1,0,0,1],
+                    [1,1,1,1,1,1,1,0,0,1,0,1,1,1,1],
+                    [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 150"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,1],
+                    [1,0,3,2,3,0,1],
+                    [1,0,2,3,2,0,1],
+                    [1,0,3,2,3,0,1],
+                    [1,0,2,3,2,0,1],
+                    [1,0,0,4,0,0,1],
+                    [1,1,1,1,1,1,1]
+                ],
+                name: "Microban 7"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1,1],
+                    [1,0,0,0,0,3,3,3,1],
+                    [1,0,0,0,0,3,3,3,1],
+                    [1,1,1,1,1,1,0,0,1],
+                    [0,0,1,0,0,1,0,0,1],
+                    [0,0,1,0,2,2,0,1,1],
+                    [0,0,1,0,4,2,0,0,1],
+                    [0,0,1,0,2,2,0,0,1],
+                    [0,0,1,1,0,2,1,0,1],
+                    [0,0,0,1,0,0,0,0,1],
+                    [0,0,0,1,1,1,1,1,1]
+                ],
+                name: "Microban 111"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,1,1,1,1,1,1],
+                    [1,0,0,1,0,2,0,1,1,1,1],
+                    [1,0,0,2,0,4,0,1,1,1,1],
+                    [1,1,0,1,1,0,1,1,1,1,1],
+                    [1,0,0,1,3,3,3,3,3,3,1],
+                    [1,0,2,0,2,0,2,0,2,0,1],
+                    [1,1,0,0,0,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 114"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,3,3,3,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,3,3,3,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,0,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,1,4,0,1,1,1,1,0,1,1,1,1],
+                    [1,1,1,1,1,0,2,0,0,0,1,1,1,0,0,1],
+                    [0,0,0,0,1,0,0,1,1,2,0,2,0,0,0,1],
+                    [0,0,0,1,1,1,0,0,0,0,0,2,2,0,0,1],
+                    [0,0,0,1,0,2,0,0,1,1,0,0,0,1,1,1],
+                    [0,0,0,1,0,0,0,0,1,1,1,1,1,1,1,1],
+                    [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 139"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,1,1,1,1,1,1],
+                    [1,0,2,0,0,0,1,1,1],
+                    [1,0,3,1,0,0,1,1,1],
+                    [1,0,2,1,0,1,1,1,1],
+                    [1,0,3,0,0,1,1,1,1],
+                    [1,1,1,1,0,1,1,1,1],
+                    [0,0,0,1,0,1,1,1,1],
+                    [0,1,1,1,0,1,1,1,1],
+                    [0,1,0,0,2,0,0,1,1],
+                    [1,1,0,1,2,1,0,1,1],
+                    [1,0,2,0,4,0,2,0,1],
+                    [1,0,3,3,1,3,3,0,1],
+                    [1,1,1,0,0,0,1,1,1],
+                    [0,0,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 143"
+            },
+            {
+                map: [
+                    [0,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,3,3,3,3,3,3,3,0,0,1],
+                    [1,0,2,2,2,2,2,2,2,4,0,1],
+                    [1,0,0,0,1,0,1,0,1,0,1,1],
+                    [1,0,1,0,1,0,0,0,0,0,1,1],
+                    [1,0,0,0,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 126"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,4,0,0,0,0,0,1],
+                    [1,0,3,2,2,3,0,1],
+                    [1,0,2,3,3,2,0,1],
+                    [1,0,2,3,3,2,0,1],
+                    [1,0,3,2,2,3,0,1],
+                    [1,0,0,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 95"
+            },
+            {
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,3,1,0,4,1,0,0,1,0,0,0,1],
+                    [1,3,1,2,2,0,0,0,1,0,2,0,1],
+                    [1,3,1,0,0,1,0,2,1,0,0,0,1],
+                    [1,3,1,0,2,1,0,0,1,0,2,1,1],
+                    [1,3,1,0,0,1,0,2,1,0,0,1,1],
+                    [1,3,1,0,2,1,0,0,1,0,2,1,1],
+                    [1,3,3,0,0,1,0,2,0,0,0,1,1],
+                    [1,3,3,0,0,1,0,0,1,0,0,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                name: "Microban 153"
+            }
+];
+
+        let currentLevel = 0;
+        let playerPos = { x: 0, y: 0 };
+        let boxes = [];
+        let targets = [];
+        let walls = [];
+        let map = [];
+        let steps = 0;
+        let history = [];
+        let completedLevels = new Set();
+
+        const gameBoard = document.getElementById('gameBoard');
+        const stepsDisplay = document.getElementById('steps');
+        const currentLevelDisplay = document.getElementById('currentLevel');
+        const progressBar = document.getElementById('progressBar');
+        const levelModal = document.getElementById('levelModal');
+        const winModal = document.getElementById('winModal');
+        const levelGrid = document.getElementById('levelGrid');
+
+        function loadProgress() {
+            const saved = localStorage.getItem('sokoban_progress');
+            if (saved) {
+                const data = JSON.parse(saved);
+                completedLevels = new Set(data.completed || []);
+                currentLevel = Math.min(data.currentLevel || 0, levels.length - 1);
+            }
+        }
+
+        function saveProgress() {
+            localStorage.setItem('sokoban_progress', JSON.stringify({
+                completed: Array.from(completedLevels),
+                currentLevel: currentLevel
+            }));
+        }
+
+        function countBoxes(levelData) {
+            let count = 0;
+            for (let row of levelData.map) {
+                for (let cell of row) {
+                    if (cell === BOX || cell === BOX_ON_TARGET) count++;
+                }
+            }
+            return count;
+        }
+
+        function initLevel(levelIndex) {
+            if (levelIndex < 0 || levelIndex >= levels.length) return;
+
+            currentLevel = levelIndex;
+            const levelData = levels[levelIndex];
+
+            map = levelData.map.map(row => [...row]);
+            boxes = [];
+            targets = [];
+            walls = [];
+            playerPos = { x: 0, y: 0 };
+            steps = 0;
+            history = [];
+
+            for (let y = 0; y < map.length; y++) {
+                for (let x = 0; x < map[y].length; x++) {
+                    const cell = map[y][x];
+                    if (cell === PLAYER) {
+                        playerPos = { x, y };
+                        map[y][x] = FLOOR;
+                    } else if (cell === BOX) {
+                        boxes.push({ x, y });
+                    } else if (cell === TARGET) {
+                        targets.push({ x, y });
+                    } else if (cell === BOX_ON_TARGET) {
+                        boxes.push({ x, y });
+                        targets.push({ x, y });
+                    } else if (cell === WALL) {
+                        walls.push({ x, y });
+                    }
+                }
+            }
+
+            currentLevelDisplay.textContent = levelIndex + 1;
+            stepsDisplay.textContent = steps;
+            updateProgressBar();
+            render();
+            saveProgress();
+        }
+
+        function updateProgressBar() {
+            progressBar.innerHTML = '';
+            const boxCount = countBoxes(levels[currentLevel]);
+            const boxesOnTarget = boxes.filter(box =>
+                targets.some(t => t.x === box.x && t.y === box.y)
+            ).length;
+
+            for (let i = 0; i < boxCount; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'progress-dot' + (i < boxesOnTarget ? ' filled' : '');
+                progressBar.appendChild(dot);
+            }
+        }
+
+        function isWall(x, y) {
+            return map[y] && map[y][x] === WALL;
+        }
+
+        function getBoxAt(x, y) {
+            return boxes.find(box => box.x === x && box.y === y);
+        }
+
+        function isTarget(x, y) {
+            return targets.some(t => t.x === x && t.y === y);
+        }
+
+        function move(dx, dy) {
+            const newX = playerPos.x + dx;
+            const newY = playerPos.y + dy;
+
+            if (isWall(newX, newY)) return false;
+
+            const box = getBoxAt(newX, newY);
+            if (box) {
+                const boxNewX = newX + dx;
+                const boxNewY = newY + dy;
+
+                if (isWall(boxNewX, boxNewY) || getBoxAt(boxNewX, boxNewY)) {
+                    return false;
+                }
+
+                history.push({
+                    playerPos: { ...playerPos },
+                    box: { ...box },
+                    boxFromTarget: isTarget(box.x, box.y)
+                });
+
+                box.x = boxNewX;
+                box.y = boxNewY;
+            } else {
+                history.push({
+                    playerPos: { ...playerPos },
+                    box: null,
+                    boxFromTarget: false
+                });
+            }
+
+            playerPos.x = newX;
+            playerPos.y = newY;
+            steps++;
+            stepsDisplay.textContent = steps;
+            updateProgressBar();
+            render();
+            checkWin();
+            return true;
+        }
+
+        function undo() {
+            if (history.length === 0) return;
+
+            const lastState = history.pop();
+            playerPos = lastState.playerPos;
+
+            if (lastState.box) {
+                const box = boxes.find(b =>
+                    b.x === lastState.box.x + (lastState.box.x - lastState.playerPos.x) ||
+                    b.y === lastState.box.y + (lastState.box.y - lastState.playerPos.y)
+                );
+
+                if (!box) {
+                    boxes.push(lastState.box);
+                } else {
+                    box.x = lastState.box.x;
+                    box.y = lastState.box.y;
+                }
+            }
+
+            steps--;
+            stepsDisplay.textContent = steps;
+            updateProgressBar();
+            render();
+        }
+
+        function reset() {
+            initLevel(currentLevel);
+        }
+
+        function checkWin() {
+            const allBoxesOnTarget = boxes.every(box =>
+                targets.some(t => t.x === box.x && t.y === box.y)
+            );
+
+            if (allBoxesOnTarget && boxes.length > 0) {
+                completedLevels.add(currentLevel);
+                saveProgress();
+
+                setTimeout(() => {
+                    document.getElementById('winLevel').textContent = currentLevel + 1;
+                    document.getElementById('winSteps').textContent = steps;
+                    winModal.classList.add('active');
+                }, 300);
+            }
+        }
+
+        /* ---- 棋盤自動縮放：永遠遷就剩餘空間，唔會頂走底部按鈕 ---- */
+        const gameContainer = document.querySelector('.game-container');
+        let cellSize = 0;
+        let fitCols = 0;
+        let fitRows = 0;
+
+        function fitBoard() {
+            if (!map.length) return;
+
+            const rows = map.length;
+            const cols = Math.max(...map.map(row => row.length));
+
+            const cs = getComputedStyle(gameContainer);
+            const availW = gameContainer.clientWidth -
+                parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            const availH = gameContainer.clientHeight -
+                parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+
+            let size = Math.floor(Math.min(availW / cols, availH / rows));
+            if (!isFinite(size) || size <= 0) size = 40;
+            size = Math.max(12, Math.min(56, size));   // 太细睇唔清、太大又會爆版
+
+            if (size === cellSize && cols === fitCols && rows === fitRows) return;
+            cellSize = size;
+            fitCols = cols;
+            fitRows = rows;
+            gameBoard.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+            gameBoard.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
+        }
+
+        window.addEventListener('resize', fitBoard);
+        window.addEventListener('orientationchange', () => setTimeout(fitBoard, 150));
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', fitBoard);
+        }
+        if (window.ResizeObserver) {
+            new ResizeObserver(fitBoard).observe(gameContainer);
+        }
+
+        function render() {
+            gameBoard.innerHTML = '';
+            const rows = map.length;
+            const cols = Math.max(...map.map(row => row.length));
+
+            fitBoard();
+            gameBoard.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+            gameBoard.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+
+                    const mapValue = map[y] && map[y][x] !== undefined ? map[y][x] : FLOOR;
+
+                    if (mapValue === WALL) {
+                        cell.classList.add('wall');
+                    } else if (mapValue === TARGET || isTarget(x, y)) {
+                        cell.classList.add('target');
+                    } else {
+                        cell.classList.add('floor');
+                    }
+
+                    const box = getBoxAt(x, y);
+                    if (box) {
+                        const boxEl = document.createElement('div');
+                        boxEl.className = 'box';
+                        if (isTarget(x, y)) {
+                            boxEl.classList.add('box-on-target');
+                        }
+                        cell.appendChild(boxEl);
+                    }
+
+                    if (playerPos.x === x && playerPos.y === y) {
+                        const playerEl = document.createElement('div');
+                        playerEl.className = 'player';
+                        cell.appendChild(playerEl);
+                    }
+
+                    gameBoard.appendChild(cell);
+                }
+            }
+        }
+
+        function createLevelGrid() {
+            levelGrid.innerHTML = '';
+            for (let i = 0; i < levels.length; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'level-btn';
+                if (completedLevels.has(i)) {
+                    btn.classList.add('completed');
+                }
+                if (i === currentLevel) {
+                    btn.classList.add('current');
+                }
+                btn.innerHTML = `${i + 1}<span class="box-count">${countBoxes(levels[i])}箱</span>`;
+                btn.addEventListener('click', () => {
+                    initLevel(i);
+                    levelModal.classList.remove('active');
+                });
+                levelGrid.appendChild(btn);
+            }
+        }
+
+        function nextLevel() {
+            if (currentLevel < levels.length - 1) {
+                initLevel(currentLevel + 1);
+            }
+        }
+
+        function prevLevel() {
+            if (currentLevel > 0) {
+                initLevel(currentLevel - 1);
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    e.preventDefault();
+                    move(0, -1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    e.preventDefault();
+                    move(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    e.preventDefault();
+                    move(-1, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    e.preventDefault();
+                    move(1, 0);
+                    break;
+                case 'u':
+                case 'U':
+                    e.preventDefault();
+                    undo();
+                    break;
+                case 'r':
+                case 'R':
+                    e.preventDefault();
+                    reset();
+                    break;
+                case 'l':
+                case 'L':
+                    e.preventDefault();
+                    createLevelGrid();
+                    levelModal.classList.add('active');
+                    break;
+                case 'Escape':
+                    levelModal.classList.remove('active');
+                    winModal.classList.remove('active');
+                    break;
+            }
+        });
+
+        document.querySelectorAll('.d-btn[data-dir]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const dir = btn.dataset.dir;
+                switch (dir) {
+                    case 'up': move(0, -1); break;
+                    case 'down': move(0, 1); break;
+                    case 'left': move(-1, 0); break;
+                    case 'right': move(1, 0); break;
+                }
+            });
+        });
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchend', (e) => {
+            if (levelModal.classList.contains('active') || winModal.classList.contains('active')) {
+                return;
+            }
+
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            const minSwipe = 30;
+
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > minSwipe) move(1, 0);
+                else if (dx < -minSwipe) move(-1, 0);
+            } else {
+                if (dy > minSwipe) move(0, 1);
+                else if (dy < -minSwipe) move(0, -1);
+            }
+        });
+
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('resetBtn').addEventListener('click', reset);
+        document.getElementById('levelsBtn').addEventListener('click', () => {
+            createLevelGrid();
+            levelModal.classList.add('active');
+        });
+        document.getElementById('closeLevelModal').addEventListener('click', () => {
+            levelModal.classList.remove('active');
+        });
+        document.getElementById('prevBtn').addEventListener('click', prevLevel);
+        document.getElementById('nextBtn').addEventListener('click', nextLevel);
+
+        document.getElementById('replayBtn').addEventListener('click', () => {
+            winModal.classList.remove('active');
+            reset();
+        });
+        document.getElementById('nextLevelBtn').addEventListener('click', () => {
+            winModal.classList.remove('active');
+            nextLevel();
+        });
+
+        levelModal.addEventListener('click', (e) => {
+            if (e.target === levelModal) {
+                levelModal.classList.remove('active');
+            }
+        });
+
+        winModal.addEventListener('click', (e) => {
+            if (e.target === winModal) {
+                winModal.classList.remove('active');
+            }
+        });
+
+        loadProgress();
+        initLevel(currentLevel);
+    </script>
+</body>
+</html>
