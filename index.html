@@ -485,7 +485,7 @@
 <body>
     <header class="header">
         <h1 class="title">倉庫番大師</h1>
-        <div class="level-info">關卡 <span id="currentLevel">1</span> / 30</div>
+        <div class="level-info">關卡 <span id="currentLevel">1</span> / <span id="totalLevels">1</span></div>
         <div class="stats">
             <div class="stat-item">
                 <span class="stat-label">步數:</span>
@@ -2229,6 +2229,10 @@
         const levelModal = document.getElementById('levelModal');
         const winModal = document.getElementById('winModal');
         const levelGrid = document.getElementById('levelGrid');
+        const totalLevelsDisplay = document.getElementById('totalLevels');
+
+        // 關卡總數由 levels 陣列實際長度決定，唔再寫死 30
+        totalLevelsDisplay.textContent = levels.length;
 
         function loadProgress() {
             const saved = localStorage.getItem('sokoban_progress');
